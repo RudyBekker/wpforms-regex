@@ -187,6 +187,7 @@ var formConfig = [
                 field_id: 1,
                 name: "Email",
                 required: true,
+                emailLookup: true,
                 step: 1,
                 valid: true,
                 regex: /([_\.0-9a-z-+]*?[aeiou][_\.0-9a-z-+]*?[b-df-hj-np-tv-z][_\.0-9a-z-+]*|[_\.0-9a-z-+]*?[b-df-hj-np-tv-z][_\.0-9a-z-+]*?[aeiou][_\.0-9a-z-+]*)@([0-9a-z][0-9a-z-]+\.)+[a-z]{2,63}$/i
@@ -299,38 +300,63 @@ var formConfig = [
     // Add more forms as needed
 ];
 
-// Initialize the valid property based on whether the field is required
-// Initialize all fields as valid initially
-formConfig.forEach(function(form) {
-    form.fields.forEach(function(field) {
-        field.valid = true; // Start with all fields as valid
-    });
-});
+// Email lists associated with each form by form_id
+// Email lists associated with each form by form_id
+var emailLists = {
+    322: ["rudy@rudybekker.com", "email2@example.com"], // ES TEST
+    130: ["rudy@rudybekker.com", "email4@example.com"], // ES Prod
+    410: ["rudy@rudybekker.com", "email6@example.com"], // DE
+    346: ["rudy@rudybekker.com", "email8@example.com"]  // UK Unbiased
+    // Add more form_id and email list pairs as needed
+};
 
-function validateField(inputField, fieldConfig, isRequired, updateColor = true) {
+// URLs to redirect to if the email is in the list
+var redirectUrls = {
+    322: "http://example.com/redirect322", // ES TEST
+    130: "http://example.com/redirect130", // ES Prod
+    410: "http://example.com/redirect410", // DE
+    346: "http://example.com/redirect346"  // UK Unbiased
+    // Add more form_id and redirect URL pairs as needed
+};
+
+function validateField(inputField, fieldConfig, formId, updateColor = true) {
     var isFieldFilled = inputField.value.trim() !== '';
     var isFieldValid = fieldConfig.regex.test(inputField.value);
-    var isValid = (isRequired && isFieldFilled && isFieldValid) || (!isRequired);
 
-    fieldConfig.valid = isValid; // Update the valid property of the field
-
-    if (updateColor) {
-        inputField.style.backgroundColor = isValid ? "#ccffcc" : "#ffcccc";
+    // Check if the field is an email field that requires lookup
+    var isEmailInList = false;
+    if (fieldConfig.emailLookup && fieldConfig.name.toLowerCase() === "email") {
+        var emailList = emailLists[formId] || [];
+        isEmailInList = emailList.includes(inputField.value.trim());
+        if (isEmailInList) {
+            // If the email is in the list, redirect and do not validate further
+            window.location.href = redirectUrls[formId];
+            return; // Stop further execution
+        }
     }
 
-    console.log("Validating field:", inputField.id, "is valid:", isValid, "is required:", isRequired);
+    var isValid = (fieldConfig.required && isFieldFilled && isFieldValid) || (!fieldConfig.required);
+    fieldConfig.valid = isValid; // Update the field's valid state
 
-    updateButtonStates();
+    if (updateColor) {
+        inputField.style.backgroundColor = isValid ? "#ccffcc" : "#ffcccc"; // Update field background color based on validity
+    }
+
+    console.log("Validating field:", inputField.name, "is valid:", isValid, "is required:", fieldConfig.required, "is in list:", isEmailInList);
+
+    updateButtonStates(formId); // Update button states based on the form being validated
 }
 
-function updateButtonStates() {
-    formConfig.forEach(function(form) {
-        var isFormValid = form.fields.every(field => field.valid); // Check if all fields are valid
-        var allButtons = document.querySelectorAll("#wpforms-" + form.form_id + " button");
-        allButtons.forEach(button => button.disabled = !isFormValid);
-    });
+function updateButtonStates(formId) {
+    var form = formConfig.find(f => f.form_id === formId);
+    if (!form) return; // If no form configuration is found, exit the function
+
+    var isFormValid = form.fields.every(field => field.valid); // Determine if all fields in the form are valid
+    var allButtons = document.querySelectorAll("#wpforms-" + formId + " button");
+    allButtons.forEach(button => button.disabled = !isFormValid); // Disable or enable the submit button based on form validity
 }
 
+// Setup event listeners for form fields
 formConfig.forEach(function(form) {
     form.fields.forEach(function(field) {
         var selector = "#wpforms-" + form.form_id + "-field_" + field.field_id;
@@ -338,8 +364,21 @@ formConfig.forEach(function(form) {
 
         if (inputField) {
             inputField.addEventListener('input', function() {
-                validateField(inputField, field, field.required);
+                validateField(inputField, field, form.form_id);
             });
         }
+    });
+});
+
+// Initial validation check for all fields on page load
+document.addEventListener('DOMContentLoaded', function() {
+    formConfig.forEach(function(form) {
+        form.fields.forEach(function(field) {
+            var selector = "#wpforms-" + form.form_id + "-field_" + field.field_id;
+            var inputField = document.querySelector(selector);
+            if (inputField) {
+                validateField(inputField, field, form.form_id, false);
+            }
+        });
     });
 });
